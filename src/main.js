@@ -61,7 +61,16 @@ gameScene.Setup = () => {
                     bullet.AI();
                 });
             })
-
+            enemy.onDestroy.add(() => {
+                if (Math.floor(Math.random()*10%3) == 0) {
+                    let aid = new Healer(enemy);
+                    aid.target = enemy.target;
+                    Gs.AddNewSprite(aid.sprite);
+                    Tm.Update.add(() => {
+                        return aid.AI();
+                    });
+                }
+            })
             Gs.AddNewSprite(enemy.sprite);
         }
     });

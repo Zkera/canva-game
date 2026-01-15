@@ -194,6 +194,11 @@ class GameObject {
         
         this.SetAngle(newAngle * 180 / Math.PI);
     }
+    /**
+     * Удаляет объект и всё с ним связанное.
+     * Работает только если в DeleteFrom указаны все списки
+     * где хранятся ссылки на объект
+     */
     DeleteMe() {
         for (let otkuda of this.DeleteFrom) {
             otkuda.delete(this);
@@ -833,6 +838,7 @@ class RandomizeSpawner extends GameObject {
     onStartWave = new Set();
     beforeWave = new CustomEvent();
     spawners = new Set();
+    chance = 8;
     IncreaseSpawnersCount(count = 1) {
         this.countOfSpawners = Math.max(Math.min(12, this.countOfSpawners + count), 1);
     }
@@ -863,10 +869,13 @@ class RandomizeSpawner extends GameObject {
     StartWave() {
         this.beforeWave.Init();
         for(const spawner of this.spawners) {
-            let newEnemy = spawner.Spawn(this.target, Math.floor(Math.random()*10/3) == 3); // 1 к 4
+            let newEnemy = spawner.Spawn(this.target, Math.floor(Math.random()*10%(this.chance)) == 0); // 1 к 4
             this.countOfEnemies++;
             this.allEnemies.add(newEnemy);
             newEnemy.DeleteFrom.add(this.allEnemies);
+        }
+        if (this.chance > 4) {
+            this.chance--;
         }
         for (const func of this.onStartWave) {
             func();
@@ -1010,3 +1019,105 @@ class CustomEvent {
         }
     }
 }
+class Healer extends GameObject{
+    health = 1;
+    damage = -6;
+    constructor(parent) {
+        super();
+        this.CreateSprite();
+        this.sprite.SetSrc("./assets./aid.png");
+        this.position = {... parent.position};
+        this.angle = 0;
+    }
+    target;
+    AI() {
+        if (CollisionSystem.checkCollision(this, this.target)) {
+            this.target.Damage(this.damage);
+            this.DeleteMe();
+            return "stop";
+        }
+    }
+}
+/* class ObjectFactory {
+    object;
+    InitNewObj() {
+        this.object = new CustomGameObject();
+    }
+    AddSprite(src) {
+        this.AddSprite();
+        this.sprite.SetSrc(src);
+    }
+    AddMapSprite(src, countColumns, countRows, sizeOfOneSprite = {w: 32, h: 32}) {
+        this.AddSprite(src);
+        this.sprite.countColumns = countColumns;
+        this.sprite.countRows = countRows;
+        this.sprite.isMap = true;
+    }
+    AddAnimatedSprite(src, countColumns, countRows, sizeOfOneSprite = {w: 32, h: 32}) {
+        this.AddMapSprite(src, countColumns, countRows, sizeOfOneSprite);
+        this.sprite.isAnimated = true;
+    }
+    AddTextUI() {
+        this.texts = new Array();
+        this.onDestroy.add(() => {
+            for(let text of this.texts) {
+                text.DeleteMe();
+            }
+        });
+    }
+    AddText(text, size, color, pos = {x: 0, y: 0}) {
+        if (this.texts == undefined) {
+            this.AddTextUI();
+        }
+        let newText = new TextController();
+        newText.text = text;
+        newText.size = size;
+        newText.color = color;
+        newText.position = pos;
+        this.texts.push(newText);
+    }
+    ChangeParams({speed, health, size = {dx: 2.5, dy: 2.5}, startPos = {... Scene.center}}) {
+        this.speed = speed;
+        this.health = health;
+        this.size = size;
+        this.position = startPos;
+    }
+    CanShoot(damage = 4, target = undefined) {
+        this.bullets = new Set();
+        this.onShoot = new CustomEvent();
+        if (target == undefined) {
+            this.Shoot = (enemies) => {
+            let newBul = new Bullet(this, enemies);
+            this.bullets.add(newBul);
+            newBul.DeleteFrom.add(this.bullets);
+            newBul.sprite.SetSrc("./assets/bullet.png");
+            for (const func of this.onShoot) {
+                func(newBul);
+            }
+            return newBul;
+        };
+        } else {
+            this.target = target;
+            this.Shoot = () => {
+            let newBul = new Bullet(this, target);
+            this.bullets.add(newBul);
+            newBul.DeleteFrom.add(this.bullets);
+            newBul.sprite.SetSrc("./assets/bullet.png");
+            for (const func of this.onShoot) {
+                func(newBul);
+            }
+            return newBul;
+        }
+    }
+
+    }
+    ParamFromParent(parent) {
+        this.parentObject = parent;
+        this.position = {... parent.position};
+        this.angle = parent.angle;
+        
+    }
+    WithAI(func) {
+        this.randomizedNum = 0;
+    }
+} */
