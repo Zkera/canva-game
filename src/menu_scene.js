@@ -16,7 +16,6 @@ mainMenuScene.Setup = () => {
         }
     });
     let testButton = new Label();
-    console.log(testButton.position);
 
     testButton.onClick.add(() => {
         Tm.Update.add(() => {

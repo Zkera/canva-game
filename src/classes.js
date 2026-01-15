@@ -59,6 +59,7 @@ class InputsManager {
     UpdateSpawnersRandomizer = new Set();
     GodMod = new Set();
     debugBtn = new Set();
+    KillAll = new CustomEvent();
     InitDebugButton() {
         for(let func of this.debugBtn) {
                     func();
@@ -110,6 +111,7 @@ class InputsManager {
                     func();
                 }
             }
+            if (e.key == 'y') {this.KillAll.Init();}
             if (e.key == "Escape") {
                 this.InitDebugButton();
             }
@@ -372,7 +374,7 @@ class EnemyAdvanced extends GameObject {
     constructor(parent, target) {
         super();
         this.CreateSprite();
-        this.sprite.SetSrc("./assets/enemy_Advanced.png");
+        this.sprite.SetSrc("./assets/enemy_advanced.png");
         this.sprite.size.w *= 1.2;
         this.sprite.size.h *= 1.2;
         this.size.dx *= 1.2;
@@ -389,16 +391,14 @@ class EnemyAdvanced extends GameObject {
             this.DeleteMe();
         }
     }
-    onShoot = new Set();
+    onShoot = new CustomEvent();
+    bullets = new Set();
     Shoot() {
         let newBul = new Bullet(this, this.target);
         newBul.sprite.SetSrc("./assets/enemy_bullet.png");
-        for (const func of this.onShoot) {
-            func(newBul);
-        }
+        this.onShoot.Init(newBul);
         return newBul;
     }
-    bullets = new Set();
     AI() {
         this.randomizedNum += Math.floor(Math.random()*10);
             if (this.randomizedNum > 700) { // начало движения вниз
@@ -816,8 +816,9 @@ class GraphicService {
     }
 }
 class Spawner extends GameObject {
-    Spawn(target, isAdvanced) {
+    Spawn(target, isAdvanced, isBoss) {
         let newEnemy = isAdvanced? new EnemyAdvanced(this, target): new EnemyBasic(this, target);
+        newEnemy = isBoss? new Boss(this, target): newEnemy;
         return newEnemy;
     }
     constructor() {
@@ -839,13 +840,30 @@ class RandomizeSpawner extends GameObject {
     beforeWave = new CustomEvent();
     spawners = new Set();
     chance = 8;
+    BossFight = false;
     IncreaseSpawnersCount(count = 1) {
-        this.countOfSpawners = Math.max(Math.min(12, this.countOfSpawners + count), 1);
+        this.countOfSpawners = Math.max(Math.min(13, this.countOfSpawners + count), 1);
+        if (this.BossFight) {
+            this.countOfSpawners = 1;
+            this.BossFight = false;
+        }
+        if (this.countOfSpawners == 13) {
+            this.countOfSpawners = 1;
+            this.BossFight = true;
+        }
     }
     UpdateSpawners() {
         this.IncreaseSpawnersCount();
+        
         for (let spawner of this.spawners) {
             spawner.DeleteMe();
+        }
+        if (this.BossFight) {
+            let newSpawner = new Spawner();
+            this.spawners.add(newSpawner);
+            newSpawner.DeleteFrom.add(this.spawners);
+            this.position.y = -5;
+            return;
         }
         let possiblePos = [];
         for (let i = 1; i < 13; i++) {
@@ -857,9 +875,9 @@ class RandomizeSpawner extends GameObject {
             this.spawners.add(newSpawner);
             newSpawner.DeleteFrom.add(this.spawners);
 
-            let randomNum = Math.floor(Math.random()* possiblePos.length);
+            const randomNum = Math.floor(Math.random()* possiblePos.length);
             const currentPos = possiblePos.splice(randomNum, 1)[0];
-            let currentPosRad = (2* Math.PI) / 12 * currentPos;
+            const currentPosRad = (2* Math.PI) / 12 * currentPos;
                      
             newSpawner.position.x = 40*Math.cos(currentPosRad) + Scene.size.dx/2;
             newSpawner.position.y = 40*Math.sin(currentPosRad) + Scene.size.dy/2;
@@ -868,12 +886,22 @@ class RandomizeSpawner extends GameObject {
     target;
     StartWave() {
         this.beforeWave.Init();
-        for(const spawner of this.spawners) {
+        if (this.BossFight) {
+            for(const spawner of this.spawners) {
+                let newEnemy = spawner.Spawn(this.target, true, true); // 1 к 4
+                this.countOfEnemies++;
+                this.allEnemies.add(newEnemy);
+                newEnemy.DeleteFrom.add(this.allEnemies);
+            }
+        } else {
+            for(const spawner of this.spawners) {
             let newEnemy = spawner.Spawn(this.target, Math.floor(Math.random()*10%(this.chance)) == 0); // 1 к 4
             this.countOfEnemies++;
             this.allEnemies.add(newEnemy);
             newEnemy.DeleteFrom.add(this.allEnemies);
         }
+        }
+        
         if (this.chance > 4) {
             this.chance--;
         }
@@ -1036,6 +1064,114 @@ class Healer extends GameObject{
             this.DeleteMe();
             return "stop";
         }
+    }
+}
+class Boss extends GameObject{
+    health = 20;
+    price = 5;
+    randomizedNum = 0;
+    dir = 1;
+    distanceFlag = 1;
+    target;
+    maxFi = 0;
+    minFi = -90;
+    fi = 0;
+    rad = 120;
+    speed = 0.8;
+    angularSpeed = 360/(2*Math.PI*this.rad / this.speed);
+    constructor(parent, target) {
+        super();
+        this.CreateSprite();
+        this.sprite.SetSrc("./assets/enemy_Advanced.png");
+        this.sprite.size.w *= 1.5;
+        this.sprite.size.h *= 1.5;
+        this.size.dx *= 1.5;
+        this.size.dy *= 1.5;
+        // this.speed = 1;
+        // this.position = {... parent.position};
+        this.angle = parent.angle;
+        this.target = target;
+
+        /* this.position.y = Scene.center.y;
+        this.position.x = 0; */
+    }
+    LifeInCell() {
+        if (this.position.x > Scene.size.dx*3 || this.position.x < -Scene.size.dx*3 ||
+            this.position.y > Scene.size.dy*3 || this.position.y < -Scene.size.dy*3
+        ) {
+            this.DeleteMe();
+        }
+    }
+    onShoot = new CustomEvent();
+    bullets = new Set();
+    countOfShoots = 0;
+    maxCountOfShoots = 2;
+    countOfShootsTwo = 0;
+    maxCountOfShootsTwo = 4;
+    randomizedNumTwo = 0;
+    Shoot() {
+        if (this.dir == 1) {
+            for (let i = 0; i < 12; i++) {
+                this.Rotate(30);
+                let newBul = new Bullet(this, this.target);
+                newBul.sprite.SetSrc("./assets/enemy_bullet.png");
+                this.onShoot.Init(newBul);
+            }
+        } else {
+            let newBul = new Bullet(this, this.target);
+            newBul.sprite.SetSrc("./assets/enemy_bullet.png");
+            this.onShoot.Init(newBul);
+        }
+    }
+    isBuffed = false
+    AI() {
+        if (this.health < 12 && !this.isBuffed) {
+            this.isBuffed = true;
+            this.speed *= 1.4;
+            this.maxCountOfShoots += 1;
+            this.angularSpeed = 360/(2*Math.PI*this.rad / this.speed);
+        }
+        if (this.dir == 1) {
+            if (this.fi > -85 && this.fi < -5) {
+                this.randomizedNum += Math.random()*10%10;
+            }
+            this.position.x = Math.cos((this.fi + 135)* Math.PI/180) * this.rad + Scene.center.x;
+            this.position.y = -Math.sin((this.fi + 135)* Math.PI/180) * this.rad + Scene.center.y/2 + this.rad;
+            if (this.randomizedNum > 350 && this.countOfShoots < this.maxCountOfShoots) {
+                console.log(this.fi);
+                this.countOfShoots++;
+                this.randomizedNum = 0;
+                
+                // this.RotateTo(this.target);
+                this.Shoot();
+            }
+            if (this.fi < this.maxFi) {
+                this.fi += this.angularSpeed;
+            } else {
+                this.fi = this.minFi;
+                this.position.y = Scene.center.y*1.5;
+                this.countOfShoots = 0;
+                this.randomizedNum = 0;
+                this.dir = -1;
+            }
+        } else {
+            // едем понизу
+            this.randomizedNumTwo += Math.random()*10%10;
+            if (this.randomizedNumTwo > 200 && this.countOfShootsTwo < this.maxCountOfShootsTwo) {
+                this.countOfShootsTwo++;
+                this.Shoot();
+                this.randomizedNumTwo = 0;
+            }
+            this.position.x += this.speed;
+
+            if (this.position.x > Scene.size.dx) {
+                this.dir = 1;
+                this.randomizedNumTwo = 0;
+                this.countOfShootsTwo = 0;
+            }
+        }
+            
+        // this.LifeInCell();
     }
 }
 /* class ObjectFactory {

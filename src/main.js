@@ -90,8 +90,6 @@ gameScene.Setup = () => {
         Tm.Update.add(() => {
             Rs.Timer();
         });
-        console.log("1");
-        
         return "stop";
     });
     // настройка интерфейса
@@ -167,8 +165,13 @@ gameScene.Setup = () => {
                 gameScene.player.killCount += enemy.price;
                 CounterBar.texts[1].text = gameScene.player.killCount;
             });
+            Im.KillAll.add(() => {
+                enemy.Damage(99);
+                return "stop";
+            });
         }
     });
+    
 }
 /* 
 gameScene.Stop();
