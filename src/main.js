@@ -2,27 +2,27 @@ let gameScene = new Scene();
 gameScene.Setup = () => {
     let Tm = gameScene.Tm;
     let Im = gameScene.Im;
-    let Cs = gameScene.Cs;
     let Gs = gameScene.Gs;
     let Rs = gameScene.Rs;
-    // настройка импутов
-    Im.debugBtn.add(() => {Tm.Toggle();});
-    Im.Setup();
-    Tm.IndependentUpdate.add(() => {
-        Gs.AnimationLoop();
+    gameScene.BaseSetup();
+    Im.pauseButton.add(() => {
+        gameScene.Stop();
+        pauseMenu.Start();
     });
-    Tm.Update.add(() => {
-        if (Im.MoveDirection.x != 0 || Im.MoveDirection.y != 0) {
-            Im.InitMoving(Im.GetMoveVector(), Im.MousePos);
-        }
-    });
-
+    gameScene.background = gameScene.AddSymbol("./assets/background.png");
+    gameScene.background.sprite.isHidden = true;
     // настройка игрока
     gameScene.player = new Player();
-    gameScene.player.onDestroy.add(() => {Tm.Toggle();});
+    gameScene.player.onDestroy.add(() => {Tm.TurnOff();});
     Gs.AddNewSprite(gameScene.player.sprite);
     Im.MouseDepended.add((pos) => {gameScene.player.RotateTo(pos);});
     Im.Controlled.add((move, dir) => {
+        if (move.y != 0) {
+            gameScene.player.sprite.SetRowAbs(1);
+        } else {
+            gameScene.player.sprite.SetRowAbs(0);
+
+        }
         gameScene.player.RotateTo(dir);
         gameScene.player.Move(move);
     });
@@ -37,15 +37,13 @@ gameScene.Setup = () => {
             bullet.AI();
         }
     });
-
     // настройка врагов 
     Rs.target = gameScene.player;
     // при запуске волны
-    Rs.onStartWave.add(() => {
+    Rs.onStartWaveForEveryone.add((enemy) => {
         // для каждого врага
-        for(const enemy of Rs.allEnemies) {
-            //  при его выстреле
-            enemy.onShoot.add((bullet) => {
+        //  при его выстреле
+        enemy.onShoot.add((bullet) => {
                 // добавляем спрайт пули
                 // в список отрисовки
                 Gs.AddNewSprite(bullet.sprite);
@@ -72,25 +70,41 @@ gameScene.Setup = () => {
                 }
             })
             Gs.AddNewSprite(enemy.sprite);
-        }
     });
-    Tm.Update.add(() => {
-        for(const enemy of Rs.allEnemies) {
-            enemy.AI();
-        }
-    });
+    
     Rs.beforeWave.add(() => {
         for(const spawner of Rs.spawners) {
             Gs.AddNewSprite(spawner.sprite);
         }
     });
     Im.AnyButton.add(() => {
-        Rs.UpdateSpawners();
-        Rs.StartWave();
+        /* Rs.UpdateSpawners();
+        Rs.StartWave(); */
         Tm.Update.add(() => {
             Rs.Timer();
         });
         return "stop";
+    });
+    Tm.Update.add(() => {
+        for(const enemy of Rs.allEnemies) {
+            enemy.AI();
+        }
+    });
+
+    //WIP
+    Rs.beforeWave.add(() => {
+        for(const spawner of Rs.spawners) {
+            if (optionsMenu.WIP) {
+                spawner.sprite.SwitchImg();
+            }
+        }
+    });
+     Rs.afterStartWave.add(() => {
+        for(const enemy of Rs.allEnemies) {
+            if (enemy.constructor.name == "EnemyBasic" && optionsMenu.WIP) {
+                enemy.sprite.SwitchImg();
+            }
+        }
     });
     // настройка интерфейса
     let WelcomeText = new TextUI();
@@ -159,9 +173,15 @@ gameScene.Setup = () => {
     CounterBar.angle = 0;
     Gs.AddNewTextUI(CounterBar);
 
-    Rs.onStartWave.add(() => {
-        for(let enemy of Rs.allEnemies) {
-            enemy.onDestroy.add(() => {
+    Rs.onStartWaveForEveryone.add((enemy) => {
+        enemy.onDestroy.add(() => {
+                if (gameScene.player.cheatOn) {
+                    CounterBar.texts[1].text = "Читы";
+                    CounterBar.texts[1].color = "red";
+
+                    return;
+                }
+                CounterBar.texts[1].color = "green";
                 gameScene.player.killCount += enemy.price;
                 CounterBar.texts[1].text = gameScene.player.killCount;
             });
@@ -169,15 +189,38 @@ gameScene.Setup = () => {
                 enemy.Damage(99);
                 return "stop";
             });
-        }
     });
-    
+    let TimerWave = new TextUI();
+    TimerWave.texts.push(new TextController(TimerWave));
+    TimerWave.texts[0].size = 10;
+    TimerWave.texts[0].color = "white";
+    TimerWave.position.y = 10;
+    TimerWave.angle = 0;
+    Tm.Update.add(() => {
+        TimerWave.texts[0].text = Rs.TimeBetweenWaves;
+    })
+    Gs.AddNewTextUI(TimerWave);
+    // TimerWave.position.x = Scene.center.y;
 }
 /* 
 gameScene.Stop();
  */
-mainMenuScene.Setup();
-mainMenuScene.Start();
+// mainMenu.Setup();
+mainMenu.Start();
+window.onbeforeunload = () => {
+    /* if (gameScene.isConfigured) {
+        
+    }
+    let t = JSON.stringify(gameScene);
+    console.log(t);
+    localStorage.setItem("game", t); */
+}
+window.onload = () => {
+    /* let oldData = JSON.parse(localStorage.getItem("game"));
+    if (oldData != null) {
+        gameScene = oldData;
+    } */
+}
 /* 
 mainMenuScene.Stop();
 gameScene.Setup();

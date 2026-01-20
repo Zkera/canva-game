@@ -4,29 +4,108 @@ class Scene {
     static center = {x: Scene.size.dx/2, y: Scene.size.dy/2};
     Tm = new TimeMachine();
     Im = new InputsManager();
-    Cs = new CollisionSystem();
     Gs = new GraphicService();
     Rs = new RandomizeSpawner();
+    onSetup = new CustomEvent();
+    onStart = new CustomEvent();
+    isConfigured = false;
     Stop() {
         this.Tm.EndOfWork();
+        this.Im.isDeactivated = true;
     }
     Start() {
-        this.Tm.Toggle();
-        this.Tm.MainLoop();
-    }   
+        if (!this.isConfigured) {
+            this.Setup();
+            this.onSetup.Init();
+            this.isConfigured = true;
+        }
+        this.onStart.Init();
+        // this.Im.isDeactivated = false;
+        
+        this.Tm.TurnOn();
+        this.Tm.Update.add(() => {
+            return this.Im.Activate();
+        });
+    }
+    /**
+     * Создаёт кнопку
+     * @param {string} src  - Если не стандартная кнопка и нужен другой спрайт
+     * @returns 
+     */
+    AddButton(src) {
+    // HitCheck? -> for (onClick) -> DelayedTriggering ... -> for(atTrigger)
+        const SRC = src == undefined? "./assets/button.png": src;
+        let nButton = new Button;
+        nButton.sprite.SetSrc(SRC);
+        nButton.onClick.add(() => {
+        this.Tm.Update.add(() => {
+            return nButton.DelayedTriggering();
+        });
+        });
+        this.Im.OnClick.add((mousePos) => {        
+            nButton.HitCheck(mousePos);
+        });
+        this.Gs.AddNewSprite(nButton.sprite);
+
+        this.Im.MouseDepended.add((pos) => {
+            if (/* nButton.sprite.currentColumn != 3 &&  */CollisionSystem.isPointInObject(nButton, pos)) {
+                nButton.sprite.NextSpriteAbs(1);
+            } else if (nButton.sprite.currentColumn == 1) {
+                nButton.sprite.NextSpriteAbs(0);
+            }
+        });
+        return nButton;
+    }
+    BaseSetup() {
+        this.Im.Setup();
+        this.Tm.IndependentUpdate.add(() => {
+            this.Gs.AnimationLoop();
+        });
+        this.Tm.Update.add(() => {
+            if (this.Im.MoveDirection.x != 0 || this.Im.MoveDirection.y != 0) {
+                this.Im.InitMoving(this.Im.GetMoveVector(), this.Im.MousePos);
+            }
+        });
+    }
+    /**
+     * обычный игровой объект выступающий в роле простой картинки
+     * @param {string} Src  -   Путь к спрайту
+     * @returns обычный игровой объект
+     */
+    AddSymbol(Src) {
+        let nSymbol = new GameObject();
+        nSymbol.CreateSprite();
+        nSymbol.sprite.SetSrc(Src);
+        nSymbol.angle = 0;
+        /* nSymbol.sprite.size.w = nSymbol.sprite.img.width;
+        nSymbol.sprite.size.h = nSymbol.sprite.img.height; */
+        nSymbol.sprite.size.h = Scene.size.dy;
+        nSymbol.sprite.size.w = Scene.size.dx;
+        this.Gs.AddNewSprite(nSymbol.sprite);
+
+        
+        return nSymbol;
+    }
 }
 class TimeMachine{
     isPlaying = false;
     Update = new CustomEvent();
     IndependentUpdate = new Set();
     STOPTHISSHITT = false;
+    TurnOn() {
+        this.isPlaying = true;
+        this.MainLoop();
+    }
+    TurnOff() {
+        this.isPlaying = false;
+    }
     Toggle() {
         this.isPlaying = !this.isPlaying;
     }
     EndOfWork() {
         this.STOPTHISSHITT = true;
         this.isPlaying = false;
-    } 
+    }
     MainLoop() {
         if (this.isPlaying) {
            /*  for (const func of this.Update) {
@@ -53,18 +132,16 @@ class InputsManager {
     MouseDepended = new Set();
     MousePos = {x: 0, y: 0};
     OnClick = new CustomEvent();
-    OnStartWave = new Set();
+    afterStartWave = new Set();
     AddSpawner = new Set();
     AnyButton = new CustomEvent();
     UpdateSpawnersRandomizer = new Set();
     GodMod = new Set();
-    debugBtn = new Set();
+    pauseButton = new CustomEvent();
     KillAll = new CustomEvent();
-    InitDebugButton() {
-        for(let func of this.debugBtn) {
-                    func();
-        }
-    }
+    isDeactivated = true;
+    TestBtn = new CustomEvent();
+    TestBtnTwo = new CustomEvent();
     GetMoveVector() {
         let norm = {x: 0, y: 0};
         if (this.MoveDirection.x != 0 || this.MoveDirection.y != 0) {
@@ -78,8 +155,24 @@ class InputsManager {
             func(move, dir);
         }
     }
+    
+    timer = 10;
+    Activate() {
+        if (this.timer <= 0) {
+            this.isDeactivated = false;
+            return "stop";
+        } else {
+            this.timer--;
+        }
+
+    }
     Setup() {
         window.addEventListener("keydown", (e) => {
+            if (this.isDeactivated) {
+                // console.log("НЕактивный ипут");
+                return;}
+            // console.log("Активный ипут") ;
+            
             if (e.key == "w")        {this.MoveDirection.y = 1}
             else if (e.key == "s")   {this.MoveDirection.y = -1}
             if (e.key == "d")        {this.MoveDirection.x = 1}
@@ -90,6 +183,10 @@ class InputsManager {
                 }
             }
             if (e.key == "F2") {
+                this.TestBtn.Init();
+            }
+            if (e.key == "F9") {
+                this.TestBtnTwo.Init();
             }
             if (e.key == "`") {
                 for(let func of this.GodMod) {
@@ -97,7 +194,7 @@ class InputsManager {
                 }
             }
             if (e.key == "e") {
-                for(let func of this.OnStartWave) {
+                for(let func of this.afterStartWave) {
                     func();
                 }
             }
@@ -113,7 +210,7 @@ class InputsManager {
             }
             if (e.key == 'y') {this.KillAll.Init();}
             if (e.key == "Escape") {
-                this.InitDebugButton();
+                this.pauseButton.Init();
             }
             
             if (e.key != "Alt") {
@@ -124,6 +221,7 @@ class InputsManager {
             }
         });
         window.addEventListener("keyup", (e) => {
+            if (this.isDeactivated) {return;}
             if (e.key == "w" && this.MoveDirection.y == 1)    {this.MoveDirection.y = 0}
             if (e.key == "s" && this.MoveDirection.y == -1)    {this.MoveDirection.y = 0}
             if (this.MoveDirection.x == 0 && this.MoveDirection.y == 0) {
@@ -133,6 +231,7 @@ class InputsManager {
             }
         });
         window.addEventListener("mousemove", (e) => {
+            if (this.isDeactivated) {return;}
             let screenToWord = {x: e.clientX * Scene.size.dx/ GraphicService.canvas.width,
                 y: e.clientY * Scene.size.dy/ GraphicService.canvas.height};
             this.MousePos = screenToWord;
@@ -141,6 +240,7 @@ class InputsManager {
             }
         });
         window.addEventListener("mousedown", (e) => {
+            if (this.isDeactivated) {return;}
            this.OnClick.Init(this.MousePos);
            this.AnyButton.Init();
         });
@@ -157,6 +257,7 @@ class GameObject {
     onDestroy = new Set();
     DeleteFrom = new Set();
     isDead = false;
+    cheatOn = false;
     Move(dir /* dir = {x: 0, y: 1} */) {
         const angleRad = this.angle * Math.PI / 180;
         
@@ -214,6 +315,7 @@ class GameObject {
     }
     health = 10;
     Damage(dam) {
+        if (this.cheatOn) {return;}
         this.health -= dam;
         if (this.health <= 0) {
             this.DeleteMe();
@@ -240,10 +342,13 @@ class Player extends GameObject{
     constructor() {
         super();
         this.CreateSprite();
-        this.sprite.SetSrc("./assets/test.png");
-        this.sprite.countColumns = 10;
-        this.sprite.countRows = 1;
-        // this.sprite.size = {w: 10, h: 10};
+        this.sprite.SetSrc("./assets/player.png", "./assets/игрок.png");
+        this.sprite.countColumns = 2;
+        this.sprite.countRows = 2;
+        
+        this.sprite.angle = 90;
+        this.sprite.size.w *= 1.5;
+        this.sprite.size.h *= 1.5;
         this.speed = 0.2;
         this.sprite.isAnimated = true;
         this.sprite.isMap = true;
@@ -316,7 +421,13 @@ class EnemyBasic extends GameObject {
     constructor(parent, target) {
         super();
         this.CreateSprite();
-        this.sprite.SetSrc("./assets/enemy.png");
+        this.sprite.SetSrc("./assets/enemy.png", "./assets/враг.png");
+        this.sprite.isMap = true;
+        this.sprite.countRows = 1;
+        this.sprite.countColumns = 2;
+        this.sprite.size.w *= 1.2;
+        this.sprite.size.h *= 1.2;
+        this.sprite.angle = 90;
         // this.sprite.size = {w: 10, h: 10};
         this.position = {... parent.position};
         this.angle = parent.angle;
@@ -346,6 +457,7 @@ class EnemyBasic extends GameObject {
     AI() {
         this.randomizedNum += Math.floor(Math.random()*10);
             if (this.randomizedNum > 500) { // начало движения вниз
+                this.sprite.NextSpriteAbs(1);
                 this.RotateTo(this.target.position);
                 this.Move({x: 0,
                             y: 1 * this.speed
@@ -354,6 +466,7 @@ class EnemyBasic extends GameObject {
                     this.dir = -this.dir;
                     this.randomizedNum = 0;
                     this.Shoot();
+                    this.sprite.NextSpriteAbs(0);
                 }
             } else {
                 this.RotateTo(this.target.position);
@@ -678,7 +791,7 @@ class SpriteController {
     isAnimated = false;
     isMap = false;
     spacing = {dx: 0, dy: 0};
-    sizeOfOneSprite = {w: 32, h: 32};
+    sizeOfOneSprite = {w: 1024, h: 1024};
 
     countRows = 0;
     countColumns = 0;
@@ -689,8 +802,22 @@ class SpriteController {
     timeBetweenFrames = 0;
     MaxTimeBetweenFrames = 10;
     parentObject;
-    angle;
+    angle = 0;
     DeleteFrom;
+    isAbsoluteSize = false;
+
+    isHidden = false;
+    imgSwitch = [];
+    imgNum = false;
+
+    SwitchImg() {
+        this.imgNum = !this.imgNum;
+        if (this.imgNum) {
+            this.img = this.imgSwitch[1];
+        } else {
+            this.img = this.imgSwitch[0];
+        }
+    }
     GetSprite() {
         const mulX = GraphicService.canvas.width/Scene.size.dx;
         const mulY = GraphicService.canvas.height/Scene.size.dy;
@@ -704,12 +831,12 @@ class SpriteController {
                 this.sizeOfOneSprite.w, this.sizeOfOneSprite.h, // срез
                 screenX + this.position.x, // xCenter в пикселях
                 screenY + this.position.y, // yCenter в пикселях
-                this.size.w * mulX, this.size.h * mulY, this.parentObject.angle ]; // width, height, angle
+                this.size.w * mulX, this.size.h * mulY, this.parentObject.angle + this.angle ]; // width, height, angle
         } else {
             return [ this.img, 0, 0, this.img.width, this.img.height, // срез
                 screenX + this.position.x, // xCenter в пикселях
                 screenY + this.position.y, // yCenter в пикселях
-                this.size.w * mulX, this.size.h * mulY, this.parentObject.angle]; // width, height, angle
+                this.size.w * mulX, this.size.h * mulY, this.parentObject.angle + this.angle]; // width, height, angle
         }
     }
     AnimationTimer() {
@@ -731,17 +858,33 @@ class SpriteController {
             this.currentColumn += 1;
         }
     }
-    SetRowAbsolute(num) {
+    NextSpriteAbs(num) {
+        if (num > this.countColumns || num < 0) {
+            console.error("Нет такого спрайта в Карте спрайтов");
+        }
+        this.currentColumn = num;
+    }
+    SetRowAbs(num) {
         if (num > -1 && num < this.countRows) {
-            this.countRows = num;
+            this.currentRow = num;
         } else {
-            console.error("Не могу найти такую анимацию (строку анимации)");
-            
+            console.error("Не могу найти такую анимацию (строку анимации)", num, this.countRows);
         }
     }
-    SetSrc(src) {
-        this.img = new Image();
-        this.img.src = src;
+    SetSrc(src0, src1) {
+        if (src1 == undefined) {
+            delete this.img; 
+            this.img = new Image();
+            this.img.src = src0;
+        } else {
+            this.imgSwitch = [];
+            this.imgSwitch.push(new Image());
+            this.imgSwitch.push(new Image());
+            this.imgSwitch[0].src = src0;
+            this.imgSwitch[1].src = src1;
+            this.img = this.imgSwitch[0];
+        }
+        
     }
     DeleteMe() {
         if(this.DeleteFrom == undefined) {
@@ -772,11 +915,11 @@ class GraphicService {
             });
         }
     }
-    static FromPixelToWord(pos) {
+    /* static FromPixelToWord(pos) {
         return {x: pos.x * Scene.size.dx/GraphicService.canvas.width,
                 y: pos.y * Scene.size.dy/GraphicService.canvas.height
         }
-    }
+    } */
     AddNewSprite(sprite) {
         this.sprites.add(sprite);
         sprite.DeleteFrom = this.sprites;
@@ -791,6 +934,7 @@ class GraphicService {
         GraphicService.ctx.clearRect(0, 0, GraphicService.canvas.width, GraphicService.canvas.height);
         for (const sprite of this.sprites)
         {
+            if (sprite.isHidden) { continue; }
             const [img, sx, sy, sW, sH, xCenter, yCenter, width, height, angle] = sprite.GetSprite();
             GraphicService.ctx.save();
             GraphicService.ctx.translate(xCenter, yCenter);
@@ -798,7 +942,6 @@ class GraphicService {
 
             GraphicService.ctx.drawImage(img, sx, sy, sW, sH, -width/2, - height/2, width, height);
             GraphicService.ctx.restore();
-            
         }
         for (const textSprite of this.texts) {
             const [text, xCenter, yCenter, color, font, size, angle] = textSprite.GetText();
@@ -817,6 +960,7 @@ class GraphicService {
 }
 class Spawner extends GameObject {
     Spawn(target, isAdvanced, isBoss) {
+        this.sprite.NextSpriteAbs(1);
         let newEnemy = isAdvanced? new EnemyAdvanced(this, target): new EnemyBasic(this, target);
         newEnemy = isBoss? new Boss(this, target): newEnemy;
         return newEnemy;
@@ -824,8 +968,14 @@ class Spawner extends GameObject {
     constructor() {
         super();
         this.CreateSprite();
-        this.sprite.SetSrc("./assets/spawner.png");
-        // this.sprite.size = {w: 10, h: 10};
+        this.sprite.SetSrc("./assets/spawner.png", "./assets/спавнер.png");
+        this.sprite.isMap = true;
+        this.sprite.countRows = 1;
+        this.sprite.countColumns = 2;
+        this.sprite.size.w *= 1.2;
+        this.sprite.size.h *= 1.2;
+        this.sprite.angle = 90;
+        this.sprite.NextSpriteAbs(0);
         return this;
     }
 }
@@ -835,8 +985,9 @@ class RandomizeSpawner extends GameObject {
     countOfEnemies = 0;
     allEnemies = new Set();
     TimeBetweenWaves = 0;
-    MaxTimeBetweenWaves = 500;
-    onStartWave = new Set();
+    MaxTimeBetweenWaves = 800;
+    afterStartWave = new Set();
+    onStartWaveForEveryone = new CustomEvent();
     beforeWave = new CustomEvent();
     spawners = new Set();
     chance = 8;
@@ -883,9 +1034,9 @@ class RandomizeSpawner extends GameObject {
             newSpawner.position.y = 40*Math.sin(currentPosRad) + Scene.size.dy/2;
         }
     }
+    spawnerUpdateFlag = false;
     target;
     StartWave() {
-        this.beforeWave.Init();
         if (this.BossFight) {
             for(const spawner of this.spawners) {
                 let newEnemy = spawner.Spawn(this.target, true, true); // 1 к 4
@@ -899,13 +1050,15 @@ class RandomizeSpawner extends GameObject {
             this.countOfEnemies++;
             this.allEnemies.add(newEnemy);
             newEnemy.DeleteFrom.add(this.allEnemies);
+            this.onStartWaveForEveryone.Init(newEnemy);
         }
         }
         
         if (this.chance > 4) {
             this.chance--;
         }
-        for (const func of this.onStartWave) {
+        this.spawnerUpdateFlag = false;
+        for (const func of this.afterStartWave) {
             func();
         }
     }
@@ -915,8 +1068,10 @@ class RandomizeSpawner extends GameObject {
         } 
         if(this.TimeBetweenWaves > 0) {
             this.TimeBetweenWaves--;
-            if (this.TimeBetweenWaves == this.MaxTimeBetweenWaves / 2) {
+            if (!this.spawnerUpdateFlag && this.TimeBetweenWaves <= this.MaxTimeBetweenWaves / 2) {
+                this.spawnerUpdateFlag = true;
                 this.UpdateSpawners();
+                this.beforeWave.Init();
             }
             return;
         }
@@ -968,27 +1123,30 @@ class TextController {
             this.color, this.size* sizeMul+ "px", this.font, this.parentObject.angle];
     }
 }
-class Label extends GameObject {
+class Button extends GameObject {
     onClick = new CustomEvent();
-    afterClick = new CustomEvent();
-    TryInit(WordPos) {
+    atTrigger = new CustomEvent();
+    HitCheck(WordPos) {
         if (CollisionSystem.isPointInObject(this, WordPos)) {
             this.onClick.Init();
         }
     }
     timeBetweenClicks = 0;
-    MaxTimeBetweenClicks = 20;
+    MaxTimeBetweenClicks = 35;
     constructor() {
         super();
         this.CreateSprite();
         this.sprite.SetSrc("./assets/label.png");
-        this.sprite.size.w *= 1;
-        this.sprite.size.h *= 1;
-        this.size.dx *= 1;
-        this.size.dy *= 1;
-        this.sprite.countColumns = 2;
+        this.sprite.size.w *= 6;
+        this.sprite.size.h *= 2;
+        this.size.dx *= 6;
+        this.size.dy *= 2;
+        this.sprite.countColumns = 3;
         this.sprite.countRows = 1;
         this.sprite.isMap = true;
+
+        this.sprite.spacing = {dx: 3, dy: 0};
+        this.sprite.sizeOfOneSprite = {w: 2347, h: 890};
         // this.sprite.isAnimated = true;
         this.sprite.NextSprite();
 
@@ -997,15 +1155,15 @@ class Label extends GameObject {
             if (this.timeBetweenClicks > 0) {
                 return;
             }
-            this.sprite.NextSprite();
+            this.sprite.NextSpriteAbs(2);
             this.timeBetweenClicks = this.MaxTimeBetweenClicks;
 
         });
     }
-    Timer() {
+    DelayedTriggering() {
         if (this.timeBetweenClicks == 0) {
             this.sprite.NextSprite();
-            this.afterClick.Init();
+            this.atTrigger.Init();
             return "stop";
         }
         this.timeBetweenClicks--;
@@ -1174,86 +1332,3 @@ class Boss extends GameObject{
         // this.LifeInCell();
     }
 }
-/* class ObjectFactory {
-    object;
-    InitNewObj() {
-        this.object = new CustomGameObject();
-    }
-    AddSprite(src) {
-        this.AddSprite();
-        this.sprite.SetSrc(src);
-    }
-    AddMapSprite(src, countColumns, countRows, sizeOfOneSprite = {w: 32, h: 32}) {
-        this.AddSprite(src);
-        this.sprite.countColumns = countColumns;
-        this.sprite.countRows = countRows;
-        this.sprite.isMap = true;
-    }
-    AddAnimatedSprite(src, countColumns, countRows, sizeOfOneSprite = {w: 32, h: 32}) {
-        this.AddMapSprite(src, countColumns, countRows, sizeOfOneSprite);
-        this.sprite.isAnimated = true;
-    }
-    AddTextUI() {
-        this.texts = new Array();
-        this.onDestroy.add(() => {
-            for(let text of this.texts) {
-                text.DeleteMe();
-            }
-        });
-    }
-    AddText(text, size, color, pos = {x: 0, y: 0}) {
-        if (this.texts == undefined) {
-            this.AddTextUI();
-        }
-        let newText = new TextController();
-        newText.text = text;
-        newText.size = size;
-        newText.color = color;
-        newText.position = pos;
-        this.texts.push(newText);
-    }
-    ChangeParams({speed, health, size = {dx: 2.5, dy: 2.5}, startPos = {... Scene.center}}) {
-        this.speed = speed;
-        this.health = health;
-        this.size = size;
-        this.position = startPos;
-    }
-    CanShoot(damage = 4, target = undefined) {
-        this.bullets = new Set();
-        this.onShoot = new CustomEvent();
-        if (target == undefined) {
-            this.Shoot = (enemies) => {
-            let newBul = new Bullet(this, enemies);
-            this.bullets.add(newBul);
-            newBul.DeleteFrom.add(this.bullets);
-            newBul.sprite.SetSrc("./assets/bullet.png");
-            for (const func of this.onShoot) {
-                func(newBul);
-            }
-            return newBul;
-        };
-        } else {
-            this.target = target;
-            this.Shoot = () => {
-            let newBul = new Bullet(this, target);
-            this.bullets.add(newBul);
-            newBul.DeleteFrom.add(this.bullets);
-            newBul.sprite.SetSrc("./assets/bullet.png");
-            for (const func of this.onShoot) {
-                func(newBul);
-            }
-            return newBul;
-        }
-    }
-
-    }
-    ParamFromParent(parent) {
-        this.parentObject = parent;
-        this.position = {... parent.position};
-        this.angle = parent.angle;
-        
-    }
-    WithAI(func) {
-        this.randomizedNum = 0;
-    }
-} */
